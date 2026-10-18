@@ -1,0 +1,6 @@
+# Scripts source each other through runtime paths ($AL_ROOT, $AL_GUEST_SRC).
+source-path=SCRIPTDIR
+source-path=SCRIPTDIR/..
+external-sources=true
+# Runtime-only files (/etc/os-release of the guest, /etc/andlinux/*).
+disable=SC1091

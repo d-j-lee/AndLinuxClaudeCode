@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# andlinux-guest-update : bring the Ubuntu guest up to date from its official
+# repositories (Ubuntu, Mozilla, Microsoft, GitHub, mise, ...), then refresh
+# installers that live outside apt. Runs as root; `andlinux update` calls it.
+set -Eeuo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+[[ "$(id -u)" == 0 ]] || exec sudo -- "$0" "$@"
+
+apt_opts=(-q -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+echo "==> apt: update + full-upgrade" >&2
+# Watchdog + retry: stalled mobile/proxy connections can hang apt.
+for attempt in 1 2 3; do
+  timeout 600 apt-get "${apt_opts[@]}" update && break
+  ((attempt == 3)) && exit 1
+  sleep $((attempt * 5))
+done
+apt-get "${apt_opts[@]}" full-upgrade
+apt-get "${apt_opts[@]}" autoremove --purge
+apt-get clean
+
+# code-server ships as a .deb from GitHub releases; its installer upgrades.
+if dpkg-query -W -f='${Status}' code-server 2>/dev/null | grep -q 'ok installed'; then
+  echo "==> code-server: upgrade" >&2
+  curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=detect
+fi

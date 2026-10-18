@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# android-open URL|FILE : open a URL or file with the matching Android app.
+# Works as $BROWSER, so tools that "open a browser" reach the phone's browser.
+set -euo pipefail
+
+: "${TERMUX_PREFIX:=/data/data/com.termux/files/usr}"
+[[ -r /etc/andlinux/config.env ]] && source /etc/andlinux/config.env
+
+target=${1:?usage: android-open URL|FILE}
+
+host_path() {
+  # Android apps cannot see guest paths; translate them to the host path of
+  # the container rootfs. Shared storage and Termux paths are already valid.
+  local p
+  p=$(readlink -f -- "$1")
+  case $p in
+    /sdcard/* | /storage/* | /data/data/com.termux/*) printf '%s\n' "$p" ;;
+    *) printf '%s/var/lib/proot-distro/containers/%s/rootfs%s\n' \
+      "$TERMUX_PREFIX" "${AL_CONTAINER:-andlinux}" "$p" ;;
+  esac
+}
+
+if [[ "$target" =~ ^[a-zA-Z][a-zA-Z0-9+.-]*: ]]; then
+  exec "$TERMUX_PREFIX/bin/termux-open-url" "$target"
+elif [[ -e "$target" ]]; then
+  exec "$TERMUX_PREFIX/bin/termux-open" "$(host_path "$target")"
+else
+  echo "android-open: not a URL or existing file: $target" >&2
+  exit 2
+fi

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# andlinux-session : start the XFCE session on $DISPLAY (Termux:X11).
+# Started by `andlinux desktop` on the Termux side; not meant to be run by hand.
+set -euo pipefail
+
+: "${DISPLAY:?DISPLAY is not set}"
+# shellcheck source=/dev/null
+[[ -r /etc/profile.d/andlinux.sh ]] && source /etc/profile.d/andlinux.sh
+
+# No logind, so nobody creates XDG_RUNTIME_DIR for us.
+export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/runtime-$(id -un)}
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 0700 "$XDG_RUNTIME_DIR"
+export XDG_SESSION_TYPE=x11 XDG_CURRENT_DESKTOP=XFCE DESKTOP_SESSION=xfce
+
+cd "$HOME"
+exec dbus-launch --exit-with-session startxfce4

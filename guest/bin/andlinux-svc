@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# andlinux-svc NAME : run one AndLinux service in the foreground with logging.
+# `andlinux svc start NAME` (Termux side) runs this in a detached proot-distro
+# session; the "andlinux-svc NAME" command line is how it finds it again.
+set -euo pipefail
+
+name=${1:?usage: andlinux-svc ssh|code-server}
+# Values passed by the host win over the copy saved at setup time.
+declare -A override=()
+for v in AL_SSH_PORT AL_SSH_LISTEN; do
+  [[ -n "${!v:-}" ]] && override[$v]=${!v}
+done
+[[ -r /etc/andlinux/config.env ]] && source /etc/andlinux/config.env
+for v in "${!override[@]}"; do
+  printf -v "$v" '%s' "${override[$v]}"
+done
+
+case $name in
+  ssh)
+    [[ "$(id -u)" == 0 ]] || { echo "andlinux-svc ssh: run as root" >&2; exit 1; }
+    mkdir -p /var/log/andlinux
+    # -F foreground, -E log to stderr, -R create host keys on first use,
+    # -s key authentication only, -w no root logins.
+    exec dropbear -F -E -R -s -w -p "${AL_SSH_LISTEN:-0.0.0.0}:${AL_SSH_PORT:-2222}" \
+      >>/var/log/andlinux/ssh.log 2>&1
+    ;;
+  code-server)
+    mkdir -p "$HOME/.local/state"
+    exec code-server >>"$HOME/.local/state/code-server.log" 2>&1
+    ;;
+  *)
+    echo "andlinux-svc: unknown service '$name'" >&2
+    exit 2
+    ;;
+esac

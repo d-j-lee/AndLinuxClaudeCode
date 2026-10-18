@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# andlinux: Ubuntu LTS desktop + Claude Code on Android (Termux + proot-distro).
+# Run `andlinux help` for the command list.
+set -Eeuo pipefail
+
+AL_ROOT=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)
+export AL_ROOT
+
+# shellcheck source=../lib/common.sh
+source "$AL_ROOT/lib/common.sh"
+# shellcheck source=../lib/host.sh
+source "$AL_ROOT/lib/host.sh"
+
+usage() {
+  cat <<'EOF'
+Usage: andlinux <command> [args]
+
+Environment
+  setup [--profile P]   Install or converge everything (idempotent)
+  update                Update toolkit, Termux, Ubuntu, Claude Code, mise tools
+  doctor                Check device, Termux, container and guest health
+  config [show|edit|path|set K V]
+
+Use
+  shell                 Ubuntu login shell as the dev user (default command)
+  root                  Ubuntu shell as root
+  run CMD...            Run a command in Ubuntu as the dev user
+  claude [ARGS...]      Start Claude Code in Ubuntu
+  desktop [--detach]    Start the XFCE desktop on Termux:X11
+  stop                  Stop the desktop and all guest sessions
+
+Network and files
+  svc <start|stop|restart|status> [ssh|code-server|all]
+  ssh-key add <key|file> | list   Authorise keys for SSH into Ubuntu
+  tunnel PORT           Public HTTPS URL for localhost:PORT (Cloudflare quick tunnel)
+  ip                    Show addresses other devices can reach
+  backup                Back up the container to shared storage (and rclone)
+  restore FILE          Restore the container from a backup (destroys current)
+
+  version | help
+EOF
+}
+
+# Subcommand implementations live in lib/cmd/<name>.sh.
+al_cmd() {
+  local name=$1
+  shift
+  # shellcheck source=/dev/null
+  source "$AL_ROOT/lib/cmd/$name.sh"
+  "cmd_${name//-/_}" "$@"
+}
+
+main() {
+  local cmd=${1:-shell}
+  (($#)) && shift
+  al_is_termux || [[ -n "${AL_ALLOW_NON_TERMUX:-}" ]] ||
+    al_die "andlinux runs inside Termux (PREFIX=${PREFIX:-unset})"
+  al_load_config
+
+  case $cmd in
+    setup | update | doctor | config | desktop | svc | backup | restore | tunnel | ip | ssh-key)
+      al_cmd "$cmd" "$@"
+      ;;
+    stop) al_cmd desktop --stop-all ;;
+    shell | login)
+      al_require_container
+      al_login "$@"
+      ;;
+    root)
+      al_require_container
+      al_login --root "$@"
+      ;;
+    run)
+      al_require_container
+      (($#)) || al_die "usage: andlinux run CMD..."
+      al_login -- bash -lc '"$@"' andlinux "$@"
+      ;;
+    claude)
+      al_require_container
+      al_login -- bash -lc 'exec claude "$@"' claude "$@"
+      ;;
+    version | --version | -V)
+      printf 'andlinux %s\n' "$(git -C "$AL_ROOT" describe --tags --always --dirty 2>/dev/null || echo unknown)"
+      ;;
+    help | -h | --help) usage ;;
+    *)
+      usage >&2
+      al_die "unknown command: $cmd"
+      ;;
+  esac
+}
+
+main "$@"
