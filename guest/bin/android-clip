@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# android-clip copy|paste : bridge stdin/stdout and the Android clipboard.
+#   echo hi | android-clip copy      android-clip paste > file
+# Needs the Termux:API app and the termux-api package.
+set -euo pipefail
+
+: "${TERMUX_PREFIX:=/data/data/com.termux/files/usr}"
+if [[ ! -x "$TERMUX_PREFIX/bin/termux-clipboard-get" ]]; then
+  echo "android-clip: install Termux:API (app) and run 'pkg install termux-api' in Termux" >&2
+  exit 1
+fi
+
+case ${1:-} in
+  copy | c) exec "$TERMUX_PREFIX/bin/termux-clipboard-set" ;;
+  paste | p) exec "$TERMUX_PREFIX/bin/termux-clipboard-get" ;;
+  *)
+    echo "usage: android-clip copy|paste" >&2
+    exit 2
+    ;;
+esac

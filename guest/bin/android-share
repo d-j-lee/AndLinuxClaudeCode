@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# android-share FILE : open the Android share sheet for FILE.
+# Needs the Termux:API app and the termux-api package.
+set -euo pipefail
+
+: "${TERMUX_PREFIX:=/data/data/com.termux/files/usr}"
+[[ -r /etc/andlinux/config.env ]] && source /etc/andlinux/config.env
+
+file=${1:?usage: android-share FILE}
+[[ -f "$file" ]] || { echo "android-share: no such file: $file" >&2; exit 2; }
+if [[ ! -x "$TERMUX_PREFIX/bin/termux-share" ]]; then
+  echo "android-share: install Termux:API (app) and run 'pkg install termux-api' in Termux" >&2
+  exit 1
+fi
+
+p=$(readlink -f -- "$file")
+case $p in
+  /sdcard/* | /storage/* | /data/data/com.termux/*) ;;
+  *) p="$TERMUX_PREFIX/var/lib/proot-distro/containers/${AL_CONTAINER:-andlinux}/rootfs$p" ;;
+esac
+exec "$TERMUX_PREFIX/bin/termux-share" -a send "$p"

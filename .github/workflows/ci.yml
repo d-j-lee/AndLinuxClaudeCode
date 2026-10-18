@@ -1,0 +1,71 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Weekly: upstream repos (Termux, Ubuntu, vendors) move under our feet.
+    - cron: "17 3 * * 1"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: shellcheck
+        run: |
+          shellcheck --version
+          shellcheck -x install.sh bin/andlinux lib/*.sh lib/cmd/*.sh \
+            guest/*.sh guest/modules/*.sh guest/bin/* tests/*.sh
+          shellcheck -s sh guest/files/profile.sh
+
+  # Full install inside the official Termux image (x86_64 because proot needs
+  # ptrace, which QEMU user emulation does not provide).
+  e2e-termux:
+    needs: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { profile: cli, release: "24.04", args: "" }
+          - { profile: desktop, release: "24.04", args: "" }
+          - { profile: cli, release: "26.04", args: "" }
+          # Docker Hub unavailable -> Canonical ubuntu-base tarball path.
+          - { profile: cli, release: "24.04", args: "--fallback" }
+    steps:
+      - uses: actions/checkout@v7
+      - name: e2e (${{ matrix.profile }}, Ubuntu ${{ matrix.release }} ${{ matrix.args }})
+        run: tests/e2e-termux.sh --profile ${{ matrix.profile }} --release ${{ matrix.release }} ${{ matrix.args }}
+        env:
+          E2E_ARTIFACTS: ${{ runner.temp }}/e2e
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: e2e-${{ matrix.profile }}-${{ matrix.release }}${{ matrix.args }}
+          path: ${{ runner.temp }}/e2e
+          if-no-files-found: ignore
+
+  # Guest provisioning on native arm64, the architecture of phones: proves
+  # every package, vendor repository and installer exists for arm64.
+  guest-arm64:
+    needs: lint
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { profile: full, release: "24.04" }
+          - { profile: desktop, release: "26.04" }
+    steps:
+      - uses: actions/checkout@v7
+      - name: provision (${{ matrix.profile }}, Ubuntu ${{ matrix.release }}, arm64)
+        run: tests/guest-docker.sh --arch arm64 --profile ${{ matrix.profile }} --release ${{ matrix.release }}
